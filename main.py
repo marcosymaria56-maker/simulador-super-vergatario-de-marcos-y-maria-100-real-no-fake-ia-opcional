@@ -11,7 +11,7 @@ class DockerSimulator:
     self.containers = {}  # ID -> dict(name, image, status, ports)
 
   def generate_id(self):
-    """Genera un Hash ID corto único de 6 caracteres hex/alfanumérico"""
+    """Genera un Hash ID corto único de 6 caracteres hex/alfanumerico"""
     return ''.join(random.choices(string.hexdigits.lower()[:16], k=6))
 
   def docker_pull(self, args):
@@ -28,9 +28,7 @@ class DockerSimulator:
       print(f'{layer}: Pull complete')
     digest = self.generate_id() + self.generate_id()
     print(f'Digest: sha256:{digest}...')
-    print(
-        f'Status: Downloaded newer image for {image_name}:latest'
-    )
+    print(f'Status: Downloaded newer image for {image_name}:latest')
     self.images.add(image_name)
 
   def docker_run(self, args):
@@ -57,9 +55,7 @@ class DockerSimulator:
 
     # Auto-pull si la imagen no existe en memoria
     if image_name not in self.images:
-      print(
-          f"Unable to find image '{image_name}:latest' locally..."
-      )
+      print(f"Unable to find image '{image_name}:latest' locally...")
       self.docker_pull([image_name])
 
     container_id = self.generate_id()
@@ -74,30 +70,47 @@ class DockerSimulator:
     print(container_id)
 
   def docker_ps(self, args):
-    show_all = '-a' in args
+    # Detecta la opción -a en cualquiera de sus posiciones
+    show_all = any(arg == '-a' or arg == '-all' for arg in args)
+
     print(
         f"{'CONTAINER ID':<15} {'IMAGE':<15} {'STATUS':<15} {'PORTS':<15}"
-        f' {'NAMES':<15}'
+        f" {'NAMES':<15}"
     )
     print('-' * 75)
+
     for cid, info in self.containers.items():
-      if not show_all and info['status'] != 'Up':
+      # Si no se incluyó -a y el contenedor no está activo (Up), se ignora
+      if not show_all and not info['status'].startswith('Up'):
         continue
-      status_str = (
-          'Up 2 minutes' if info['status'] == 'Up' else 'Exited (0)'
-      )
+
+      status_str = info['status']
+      if status_str == 'Up':
+        status_str = 'Up 2 minutes'
+      elif status_str == 'Exited':
+        status_str = 'Exited (0)'
+
       print(
           f"{cid:<15} {info['image']:<15} {status_str:<15}"
           f" {info['ports']:<15} {info['name']:<15}"
       )
 
   def _find_container(self, target):
-    """Busca un contenedor por su ID o por su Nombre"""
+    """Busca un contenedor por su ID (exacto o prefijo) o por su Nombre"""
+    # 1. Búsqueda por ID exacto
     if target in self.containers:
       return target
+
+    # 2. Búsqueda por Nombre exacto
     for cid, info in self.containers.items():
       if info['name'] == target:
         return cid
+
+    # 3. Búsqueda por coincidencia parcial de ID (si el usuario escribe los primeros caracteres)
+    for cid in self.containers:
+      if cid.startswith(target):
+        return cid
+
     return None
 
   def docker_stop(self, args):
@@ -109,6 +122,7 @@ class DockerSimulator:
     if not cid:
       print(f'Error: No such container: {target}')
       return
+
     self.containers[cid]['status'] = 'Exited'
     print(target)
 
@@ -123,7 +137,7 @@ class DockerSimulator:
       return
 
     # Regla: Si está en ejecución (Up), genera un error
-    if self.containers[cid]['status'] == 'Up':
+    if self.containers[cid]['status'].startswith('Up'):
       print(
           f'Error response from daemon: You cannot remove a running container'
           f' {cid}. Stop the container before attempting removal.'
@@ -144,9 +158,7 @@ class DockerSimulator:
       return
 
     img = self.containers[cid]['image']
-    print(
-        f'[INFO] Initializing server logs for container {cid} ({img})...'
-    )
+    print(f'[INFO] Initializing server logs for container {cid} ({img})...')
     print(f'[INFO] Server started on port 80...')
     print(f'[GET] /index.html 200 OK - 12ms')
     print(f'[POST] /api/v1/login 200 OK - 45ms')
@@ -197,4 +209,3 @@ class DockerSimulator:
 if __name__ == '__main__':
   sim = DockerSimulator()
   sim.run_cli()
-  
